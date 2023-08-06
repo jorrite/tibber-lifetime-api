@@ -16,9 +16,9 @@ const handler = async (req, res) => {
     return send(res, 405, { error: "method" });
   }
 
-  const { status, data } = await getAllData();
+  const { status, formatted } = await getYearlyData();
 
-  send(res, status, data);
+  send(res, status, formatted);
 };
 
 const server = new http.Server(serve(handler));
@@ -32,31 +32,17 @@ server.on("error", (error) => {
 
 server.listen(Number(process.env.PORT));
 
-async function getAllData() {
-  const arr = [];
-  arr.push(await getYearlyData());
-  arr.push(await getMonthlyData());
-  arr.push(await getDailyData());
-  arr.push(await getHourlyData());
-
-  const finalResult = arr.reduce(sumFormatted, {
-    consumption: 0,
-    production: 0,
-  });
-  return { status: 200, data: finalResult };
-}
-
 async function getYearlyData() {
   const body = {
     query: `{
     viewer {
       homes {
-        consumption(resolution: ANNUAL, last: 100, filterEmptyNodes: true) {
+        consumption(resolution: ANNUAL, first: 100, filterEmptyNodes: true) {
           nodes {
             consumption
           }
         }
-        production(resolution: ANNUAL, last: 100,  filterEmptyNodes: true) {
+        production(resolution: ANNUAL, first: 100,  filterEmptyNodes: true) {
           nodes {
             production
           }
@@ -66,98 +52,6 @@ async function getYearlyData() {
   }`,
   };
   return getData(body);
-}
-
-async function getMonthlyData() {
-  const firstDayOfYearB64 = btoa(
-    getLocalISOString(new Date(new Date().getFullYear(), 0, 1))
-  );
-  const body = {
-    query: `{
-    viewer {
-      homes {
-        consumption(resolution: MONTHLY, first: 12, after: "${firstDayOfYearB64}", filterEmptyNodes: true) {
-          nodes {
-            consumption
-          }
-        }
-        production(resolution: MONTHLY, first: 12, after: "${firstDayOfYearB64}",  filterEmptyNodes: true) {
-          nodes {
-            production
-          }
-        }
-      }
-    }
-  }`,
-  };
-  return getData(body);
-}
-
-async function getDailyData() {
-  const firstDayOfMonthB64 = btoa(
-    getLocalISOString(
-      new Date(new Date().getFullYear(), new Date().getMonth(), 1)
-    )
-  );
-  const body = {
-    query: `{
-    viewer {
-      homes {
-        consumption(resolution: DAILY, first: 31, after: "${firstDayOfMonthB64}", filterEmptyNodes: true) {
-          nodes {
-            consumption
-          }
-        }
-        production(resolution: DAILY, first: 31, after: "${firstDayOfMonthB64}",  filterEmptyNodes: true) {
-          nodes {
-            production
-          }
-        }
-      }
-    }
-  }`,
-  };
-  return getData(body);
-}
-
-async function getHourlyData() {
-  const firstHourOfDayB64 = btoa(
-    getLocalISOString(
-      new Date(
-        new Date().getFullYear(),
-        new Date().getMonth(),
-        new Date().getDate()
-      )
-    )
-  );
-  const body = {
-    query: `{
-    viewer {
-      homes {
-        consumption(resolution: HOURLY, first: 24, after: "${firstHourOfDayB64}", filterEmptyNodes: true) {
-          nodes {
-            consumption
-          }
-        }
-        production(resolution: HOURLY, first: 24, after: "${firstHourOfDayB64}",  filterEmptyNodes: true) {
-          nodes {
-            production
-          }
-        }
-      }
-    }
-  }`,
-  };
-  return getData(body);
-}
-
-function getLocalISOString(date) {
-  const offset = date.getTimezoneOffset();
-  const offsetAbs = Math.abs(offset);
-  const isoString = new Date(date.getTime() - offset * 60 * 1000).toISOString();
-  return `${isoString.slice(0, -1)}${offset > 0 ? "-" : "+"}${String(
-    Math.floor(offsetAbs / 60)
-  ).padStart(2, "0")}:${String(offsetAbs % 60).padStart(2, "0")}`;
 }
 
 async function getData(body) {
@@ -179,16 +73,9 @@ async function getData(body) {
       .map((item) => item.production)
       .reduce(sum, 0),
   };
-  return formatted;
+  return { status: 200, formatted };
 }
 
 function sum(result, item) {
   return result + item;
-}
-
-function sumFormatted(result, item) {
-  return {
-    consumption: result.consumption + item.consumption,
-    production: result.production + item.production,
-  };
 }
